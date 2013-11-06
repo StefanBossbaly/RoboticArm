@@ -7,13 +7,16 @@
                 
 COUNT:          RMB 2
 SPACE:          RMB 1
+KeyCount:       RMB 1
+KeyValue:       RMB 1
         
         
 MAIN:           MOVB #$FF, DDRA         ;Port A is all output
-                MOVB #$0F, DDRB         ;Upper nibble is output and lower nibble is input
+                MOVB #$F0, DDRB         ;Upper nibble is output and lower nibble is input
                 MOVB #$00, PORTA
                 MOVW #$0000, COUNT
                 MOVB #$00, SPACE
+                MOVB #$00, KeyCount
                 
                 JSR TimSet
                 CLI                     ;Enable interrupts
@@ -128,7 +131,7 @@ TimSet:         MOVB #$80, TSCR         ;Turn on timer
 ; void TimeIntHandler(void)
 ; Handles the timer overflow interrupt
 ;-------------------------------------------------------------------------------
-TimeIntHandler:	LDD COUNT
+TimeIntHandler:        LDD COUNT
                 ADDD #$0001
                 STD COUNT
                 CPD #$001F              ;See if we need to check the keypad
@@ -144,7 +147,18 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 ;void HANIO(void)
 ;Handles the keypad input
 ;-------------------------------------------------------------------------------
-HANIO:		JSR KEYIO
+OpenClaw:       LDAA #$00
+                PSHA
+                JSR mMovClaw
+                LEAS 1,SP
+                RTS
+CloseClaw:      LDAA #$01
+                PSHA
+                JSR mMovClaw
+                LEAS 1,SP
+                RTS
+                
+HANIO:          JSR KEYIO
                 CMPA #$11
                 BEQ HANIONOIO           ;We didn't have any input
                 LDAB SPACE
@@ -154,18 +168,52 @@ HANIO:		JSR KEYIO
                 CMPA #$0F
                 BEQ HANIOFLUSH          ;The flush key was pressed
                 MOVB #$00, PORTA
+                CMPA #$00
+                BEQ RotBaseCCW
                 CMPA #$01
-                BNE LOL
-                LDAA #$00
+                BEQ RotBaseCW
+                CMPA #$02
+                BEQ MovBaseD
+                CMPA #$03
+                BEQ MovBaseUp
+                CMPA #$04
+                BEQ MovElbowD
+                CMPA #$05
+                BEQ MovElbowUp
+                CMPA #$06
+                BEQ OpenClaw
+                BNE CloseClaw
+RotBaseCCW:     LDAA #$00
                 PSHA
-                JSR mMovClaw
+                JSR mRotBase
                 LEAS 1,SP
                 BRA HANIOEND
-LOL:            LDAA #$01
+RotBaseCW:      LDAA #$01
                 PSHA
-                JSR mMovClaw
+                JSR mRotBase
                 LEAS 1,SP
                 BRA HANIOEND
+MovBaseD:       LDAA #$00
+                PSHA
+                JSR mMovBase
+                LEAS 1,SP
+                BRA HANIOEND
+MovBaseUp:      LDAA #$01
+                PSHA
+                JSR mMovBase
+                LEAS 1,SP
+                BRA HANIOEND
+MovElbowD:      LDAA #$00
+                PSHA
+                JSR mMovElbow
+                LEAS 1,SP
+                BRA HANIOEND
+MovElbowUp:     LDAA #$01
+                PSHA
+                JSR mMovElbow
+                LEAS 1,SP
+                BRA HANIOEND
+
 HANIOFLUSH:     MOVB #$00, PORTA
                 RTS
 HANIONOIO:      MOVB #$01,SPACE
@@ -177,18 +225,18 @@ HANIOEND:       RTS
 ;If there is no input then it returns 17
 ;-------------------------------------------------------------------------------
 CINPUT:         LDAA PORTB      ;Load port b into
-                ANDA #$F0       ;Get the upper nibble
+                ANDA #$0F       ;Get the lower nibble
                 CMPA #$00       ;See if there is any input
                 BEQ CNOIN       ;There is no input
-                CMPA #$10       ;Compare to the bit pattern 0x10 (first row)
+                CMPA #$08       ;Compare to the bit pattern 0x10 (first row)
                 BEQ  CINR0
-                CMPA #$20       ;Compare to the bit pattern 0x20 (second row)
+                CMPA #$04        ;Compare to the bit pattern 0x20 (second row)
                 BEQ  CINR1
-                CMPA #$40       ;Compare to the bit pattern 0x40 (thrid row)
+                CMPA #$02        ;Compare to the bit pattern 0x40 (thrid row)
                 BEQ  CINR2
-                CMPA #$80       ;Compare to the bit pattern 0x80 (fourth row)
+                CMPA #$01       ;Compare to the bit pattern 0x80 (fourth row)
                 BEQ  CINR3
-                LDAA #$11       ;Should never get here
+                LDAA #$11       ;Should never  get here
                 RTS
 CINR0:          LDAA #$00
                 ADDA 2,SP
@@ -210,23 +258,23 @@ CNOIN:          LDAA #$11        ;Load 17 into A register
 ;Sees if there is any input on keypad and returns it in the A register
 ;If there is no input then it returns 17
 ;-------------------------------------------------------------------------------
-KEYIO:          LDAA #$08       ;Set 0x08 into Port B
-                STAA PORTB      ;This sets PB4 as HIGH all other are LOW
+KEYIO:          LDAA #$80       ;Set 0x80 into Port B
+                STAA PORTB      ;This sets PB3 as HIGH all other are LOW
                 LDAA #$00       ;Load 0 into A
                 PSHA            ;Push it onto the stack
                 JSR CINPUT      ;Jump to the subroutine
                 LEAS 1,SP       ;Put the stack back to normal
                 CMPA #$11
                 BNE HASIN
-                LDAA #$04       ;Set 0x04 into Port B
-                STAA PORTB      ;This sets PB3 as HIGH all other are LOW
+                LDAA #$40       ;Set 0x40 into Port B
+                STAA PORTB      ;This sets PB2 as HIGH all other are LOW
                 LDAA #$01       ;Load 1 as column parameter
                 PSHA
                 JSR CINPUT      ;Jump to the subroutine
                 LEAS 1,SP       ;Put the stack back to normal
                 CMPA #$11
                 BNE HASIN
-                LDAA #$02       ;Set 0x02 into Port B
+                LDAA #$20       ;Set 0x02 into Port B
                 STAA PORTB      ;This sets PB1 as HIGH all other are LOW
                 LDAA #$02       ;Load 2 into A
                 PSHA            ;Push it onto the stack
@@ -234,7 +282,7 @@ KEYIO:          LDAA #$08       ;Set 0x08 into Port B
                 LEAS 1,SP       ;Put the stack back to normal
                 CMPA #$11
                 BNE HASIN
-                LDAA #$01       ;Set 0x01 into Port B
+                LDAA #$10       ;Set 0x01 into Port B
                 STAA PORTB      ;This sets PB0 as HIGH all other are LOW
                 LDAA #$03       ;Load 2 into A
                 PSHA            ;Push it onto the stack

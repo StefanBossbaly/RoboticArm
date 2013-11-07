@@ -131,7 +131,7 @@ TimSet:         MOVB #$80, TSCR         ;Turn on timer
 ; void TimeIntHandler(void)
 ; Handles the timer overflow interrupt
 ;-------------------------------------------------------------------------------
-TimeIntHandler:        LDD COUNT
+TimeIntHandler: LDD COUNT
                 ADDD #$0001
                 STD COUNT
                 CPD #$001F              ;See if we need to check the keypad
@@ -147,23 +147,12 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 ;void HANIO(void)
 ;Handles the keypad input
 ;-------------------------------------------------------------------------------
-OpenClaw:       LDAA #$00
-                PSHA
-                JSR mMovClaw
-                LEAS 1,SP
-                RTS
-CloseClaw:      LDAA #$01
-                PSHA
-                JSR mMovClaw
-                LEAS 1,SP
-                RTS
-                
 HANIO:          JSR KEYIO
                 CMPA #$11
-                BEQ HANIONOIO           ;We didn't have any input
+                LBEQ HANIONOIO           ;We didn't have any input
                 LDAB SPACE
                 CMPB #$01               ;Make sure that was a space inbetween
-                BNE HANIOEND
+                LBNE HANIOEND
                 MOVB #$00,SPACE
                 CMPA #$0F
                 BEQ HANIOFLUSH          ;The flush key was pressed
@@ -213,7 +202,16 @@ MovElbowUp:     LDAA #$01
                 JSR mMovElbow
                 LEAS 1,SP
                 BRA HANIOEND
-
+OpenClaw:       LDAA #$00
+                PSHA
+                JSR mMovClaw
+                LEAS 1,SP
+                BRA HANIOEND
+CloseClaw:      LDAA #$01
+                PSHA
+                JSR mMovClaw
+                LEAS 1,SP
+                BRA HANIOEND
 HANIOFLUSH:     MOVB #$00, PORTA
                 RTS
 HANIONOIO:      MOVB #$01,SPACE

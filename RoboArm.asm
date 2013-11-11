@@ -9,6 +9,8 @@ COUNT:          RMB 2
 SPACE:          RMB 1
 KeyCount:       RMB 1
 KeyValue:       RMB 1
+KeyMode:        FCB 0
+Position:       FCB 0
         
         
 MAIN:           MOVB #$FF, DDRA         ;Port A is all output
@@ -17,8 +19,9 @@ MAIN:           MOVB #$FF, DDRA         ;Port A is all output
                 MOVW #$0000, COUNT
                 MOVB #$00, SPACE
                 MOVB #$00, KeyCount
-                
+
                 JSR TimSet
+                JSR ADSet
                 CLI                     ;Enable interrupts
 
 LOOP:           WAI
@@ -113,6 +116,42 @@ mMovClawEnd:    PULA
                 RTS
                 
 ;-------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
+; AtoD Subroutines
+;-------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
+
+;-------------------------------------------------------------------------------
+; void ADset(void)
+; Sets up the A to D converter
+;-------------------------------------------------------------------------------
+ADSet:          PSHY
+                MOVB #$03, ATD0DIEN  ;Make only bits 0 and 1 of PortA digital
+                MOVB #$80, ATD0CTL2  ;Turn on the A to D converter (bit 7 of ATD0CTL2)
+                LDY #$ea00                 ; Brief delay to allow AtoD to power up
+D1:             DEY                        ; decrements the y index register 65000 times
+                BNE D1                 ; and then returns.
+                MOVB #$80, ATD0CTL4   ; (ATDOCTL4 Bit 7 0=>10 bits, 1=>8 bits)
+                PULY
+                RTS
+
+ADA8:           PSHA
+                PSHB
+                CMPA #$07
+                BGT ADA82
+                CMPA #$02
+                BLT ADA82
+                LDAB #$08         ; Start A to D conversion do a single channel conversion on
+                STAB atd0ctl3,x         ; Port A Bit 2 Least significant 4 bits are starting A to D Channel
+                STAA atd0ctl5,x
+ADA81:          LDAA atd0stat,x
+                ANDA #$80        ; Wait for conversion complete flag to set (bit 7 of atd0stat)
+                BEQ ADA81
+ADA82:          PULB
+        	PULA
+                RTS
+
+;-------------------------------------------------------------------------------
 ; void TimSet(void)
 ; Sets up the timer for timeroverflow
 ;-------------------------------------------------------------------------------
@@ -137,7 +176,22 @@ TimeIntHandler: LDD COUNT
                 CPD #$001F              ;See if we need to check the keypad
                 BNE INTCLR
                 MOVW #$0000, COUNT      ;Reset the value of count
+                JSR KEYIO
+                CMPA #14
+                BEQ IntModeSwitch
+                LDAA KeyMode
+                CMPA #$00
+                BNE IntAutoMode
                 JSR HANIO
+                BRA INTCLR
+IntAutoMode:    NOP
+                BRA INTCLR
+IntModeSwitch:  LDAA KeyMode
+                CMPA #$01
+                BEQ IntOp
+                MOVB #$01, KeyMode
+                BRA INTCLR
+IntOp:          MOVB #$00, KeyMode
 INTCLR:         LDAA TFLG2              ;Clear overflow bit
                 ANDA #$80
                 STAA TFLG2
@@ -156,7 +210,7 @@ HANIO:          JSR KEYIO
                 MOVB #$00,SPACE
                 CMPA #$0F
                 BEQ HANIOFLUSH          ;The flush key was pressed
-                MOVB #$00, PORTA
+                ;MOVB #$00, PORTA
                 CMPA #$00
                 BEQ RotBaseCCW
                 CMPA #$01

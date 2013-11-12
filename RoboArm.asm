@@ -138,19 +138,25 @@ D1:             DEY                        ; decrements the y index register 650
                 PULY
                 RTS
 
-ADA8:           PSHA
+;-------------------------------------------------------------------------------
+; void ConAtoD(int port_number)
+; Uses the A to D converter to convert an analog value on port_number to a
+; digital value in ADR00H register
+;-------------------------------------------------------------------------------
+ConAtoD:        PSHA
                 PSHB
+                LDAA 4,SP
                 CMPA #$07
-                BGT ADA82
+                BGT ConAtoDWaitEnd
                 CMPA #$02
-                BLT ADA82
-                LDAB #$08         ; Start A to D conversion do a single channel conversion on
-                STAB atd0ctl3,x         ; Port A Bit 2 Least significant 4 bits are starting A to D Channel
-                STAA atd0ctl5,x
-ADA81:          LDAA atd0stat,x
+                BLT ConAtoDWaitEnd
+                LDAB #$08	; Start A to D conversion do a single channel conversion on
+                STAB ATD0CTL3   ; Port A Bit 2 Least significant 4 bits are starting A to D Channel
+                STAA ATD0CTL5
+ConAtoDWait:    LDAA ATD0STAT
                 ANDA #$80        ; Wait for conversion complete flag to set (bit 7 of atd0stat)
-                BEQ ADA81
-ADA82:          PULB
+                BEQ ConAtoDWait
+ConAtoDWaitEnd: PULB
         	PULA
                 RTS
 
@@ -211,13 +217,16 @@ HanAuto:        LDAA Position
                 PSHA
                 JSR mRotBase
                 LEAS 1,SP
-		LDAA #$02               ;Do A-to-D conversion
-                JSR ADA8
+                LDAA #$02
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
                 LDAA ADR00H
+                SWI
                 CMPA #$FF               ;See if we are not at an LED
                 BEQ HanAutoHigh
                 CMPA #$10               ;See if we are at an LED
-                BLE HanAutoEnd
+                BGE HanAutoEnd
                 LDAA High               ;Make sure we passed a space inbetween
                 CMPA #$00
                 BEQ HanAutoEnd

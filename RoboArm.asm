@@ -10,7 +10,10 @@ SPACE:          RMB 1
 KeyCount:       RMB 1
 KeyValue:       RMB 1
 KeyMode:        FCB 0
+
 Position:       FCB 0
+Target:         FCB 3
+High:           FCB 0
         
         
 MAIN:           MOVB #$FF, DDRA         ;Port A is all output
@@ -182,9 +185,9 @@ TimeIntHandler: LDD COUNT
                 LDAA KeyMode
                 CMPA #$00
                 BNE IntAutoMode
-                JSR HANIO
+                JSR HanOperMode
                 BRA INTCLR
-IntAutoMode:    NOP
+IntAutoMode:    JSR HanAuto
                 BRA INTCLR
 IntModeSwitch:  LDAA KeyMode
                 CMPA #$01
@@ -196,20 +199,51 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
                 ANDA #$80
                 STAA TFLG2
                 RTI                     ;Return
+
+;-------------------------------------------------------------------------------
+;void HanAuto(void)
+;Handles the auto
+;-------------------------------------------------------------------------------
+HanAuto:        LDAA Position
+                CMPA Target
+                BEQ HanAutoTarget
+                LDAA #$01
+                PSHA
+                JSR mRotBase
+                LEAS 1,SP
+		LDAA #$02               ;Do A-to-D conversion
+                JSR ADA8
+                LDAA ADR00H
+                CMPA #$FF               ;See if we are not at an LED
+                BEQ HanAutoHigh
+                CMPA #$10               ;See if we are at an LED
+                BLE HanAutoEnd
+                LDAA High               ;Make sure we passed a space inbetween
+                CMPA #$00
+                BEQ HanAutoEnd
+                ADDA #$01
+                STAA Position
+                MOVB #$00, High         ;Set high back to 0
+                SWI
+                BRA HanAutoEnd
+HanAutoHigh:    MOVB #$01, High         ;We have moved past a LED
+                BRA HanAutoEnd
+HanAutoTarget:  MOVB #$00, PORTA
+HanAutoEnd:     RTS
                 
 ;-------------------------------------------------------------------------------
-;void HANIO(void)
+;void HanOperatorMode(void)
 ;Handles the keypad input
 ;-------------------------------------------------------------------------------
-HANIO:          JSR KEYIO
+HanOperMode:	JSR KEYIO
                 CMPA #$11
-                LBEQ HANIONOIO           ;We didn't have any input
+                LBEQ HanOperModeNoI     ;We didn't have any input
                 LDAB SPACE
                 CMPB #$01               ;Make sure that was a space inbetween
-                LBNE HANIOEND
+                LBNE HanOperModeEnd
                 MOVB #$00,SPACE
                 CMPA #$0F
-                BEQ HANIOFLUSH          ;The flush key was pressed
+                BEQ HanOperModeClr          ;The flush key was pressed
                 ;MOVB #$00, PORTA
                 CMPA #$00
                 BEQ RotBaseCCW
@@ -230,46 +264,46 @@ RotBaseCCW:     LDAA #$00
                 PSHA
                 JSR mRotBase
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 RotBaseCW:      LDAA #$01
                 PSHA
                 JSR mRotBase
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 MovBaseD:       LDAA #$00
                 PSHA
                 JSR mMovBase
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 MovBaseUp:      LDAA #$01
                 PSHA
                 JSR mMovBase
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 MovElbowD:      LDAA #$00
                 PSHA
                 JSR mMovElbow
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 MovElbowUp:     LDAA #$01
                 PSHA
                 JSR mMovElbow
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 OpenClaw:       LDAA #$00
                 PSHA
                 JSR mMovClaw
                 LEAS 1,SP
-                BRA HANIOEND
+                BRA HanOperModeEnd
 CloseClaw:      LDAA #$01
                 PSHA
                 JSR mMovClaw
                 LEAS 1,SP
-                BRA HANIOEND
-HANIOFLUSH:     MOVB #$00, PORTA
+                BRA HanOperModeEnd
+HanOperModeClr: MOVB #$00, PORTA
                 RTS
-HANIONOIO:      MOVB #$01,SPACE
-HANIOEND:       RTS
+HanOperModeNoI: MOVB #$01,SPACE
+HanOperModeEnd: RTS
 
 ;-------------------------------------------------------------------------------
 ;int CINPUT(int column)

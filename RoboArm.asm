@@ -9,11 +9,11 @@ COUNT:          RMB 2
 SPACE:          RMB 1
 KeyCount:       RMB 1
 KeyValue:       RMB 1
-KeyMode:        FCB 0
+KeyMode:        RMB 1
 
-Position:       FCB 0
-Target:         FCB 3
-High:           FCB 0
+Position:       RMB 1
+Target:         RMB 1
+High:           RMB 1
         
         
 MAIN:           MOVB #$FF, DDRA         ;Port A is all output
@@ -21,7 +21,13 @@ MAIN:           MOVB #$FF, DDRA         ;Port A is all output
                 MOVB #$00, PORTA
                 MOVW #$0000, COUNT
                 MOVB #$00, SPACE
+
                 MOVB #$00, KeyCount
+                MOVB #$00, KeyMode
+                
+                MOVB #$00, Position
+                MOVB #$02, Target
+                MOVB #$00, High
 
                 JSR TimSet
                 JSR ADSet
@@ -150,14 +156,14 @@ ConAtoD:        PSHA
                 BGT ConAtoDWaitEnd
                 CMPA #$02
                 BLT ConAtoDWaitEnd
-                LDAB #$08	; Start A to D conversion do a single channel conversion on
+                LDAB #$08        ; Start A to D conversion do a single channel conversion on
                 STAB ATD0CTL3   ; Port A Bit 2 Least significant 4 bits are starting A to D Channel
                 STAA ATD0CTL5
 ConAtoDWait:    LDAA ATD0STAT
                 ANDA #$80        ; Wait for conversion complete flag to set (bit 7 of atd0stat)
                 BEQ ConAtoDWait
 ConAtoDWaitEnd: PULB
-        	PULA
+                PULA
                 RTS
 
 ;-------------------------------------------------------------------------------
@@ -182,7 +188,7 @@ TimSet:         MOVB #$80, TSCR         ;Turn on timer
 TimeIntHandler: LDD COUNT
                 ADDD #$0001
                 STD COUNT
-                CPD #$001F              ;See if we need to check the keypad
+                CPD #$000C              ;See if we need to check the keypad
                 BNE INTCLR
                 MOVW #$0000, COUNT      ;Reset the value of count
                 JSR KEYIO
@@ -211,7 +217,7 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 ;Handles the auto
 ;-------------------------------------------------------------------------------
 HanAuto:        LDAA Position
-                CMPA Target
+                CMPA Target,d
                 BEQ HanAutoTarget
                 LDAA #$01
                 PSHA
@@ -222,29 +228,29 @@ HanAuto:        LDAA Position
                 JSR ConAtoD
                 LEAS 1,SP
                 LDAA ADR00H
-                SWI
-                CMPA #$FF               ;See if we are not at an LED
-                BEQ HanAutoHigh
-                CMPA #$10               ;See if we are at an LED
-                BGE HanAutoEnd
+                CMPA #$C0               ;See if we are not at an LED
+                BHI HanAutoHigh
+                CMPA #$10             ;See if we are at an LED
+                BHI HanAutoEnd
                 LDAA High               ;Make sure we passed a space inbetween
                 CMPA #$00
                 BEQ HanAutoEnd
+                LDAA Position
                 ADDA #$01
                 STAA Position
                 MOVB #$00, High         ;Set high back to 0
-                SWI
                 BRA HanAutoEnd
 HanAutoHigh:    MOVB #$01, High         ;We have moved past a LED
                 BRA HanAutoEnd
 HanAutoTarget:  MOVB #$00, PORTA
+                SWI
 HanAutoEnd:     RTS
                 
 ;-------------------------------------------------------------------------------
-;void HanOperatorMode(void)
-;Handles the keypad input
+; void HanOperatorMode(void)
+; Handles the keypad input
 ;-------------------------------------------------------------------------------
-HanOperMode:	JSR KEYIO
+HanOperMode:    JSR KEYIO
                 CMPA #$11
                 LBEQ HanOperModeNoI     ;We didn't have any input
                 LDAB SPACE

@@ -11,9 +11,7 @@ KeyCount:       RMB 1
 KeyValue:       RMB 1
 KeyMode:        RMB 1
 
-Position:       RMB 1
 Target:         RMB 1
-High:           RMB 1
 
 LOWTHHOLD:      EQU $0A
 HIGHTHHOLD:     EQU $F0
@@ -32,16 +30,11 @@ MAIN:           MOVB #$FF, DDRA         ;Port A is all output
                 MOVB #$00, KeyCount
                 MOVB #$00, KeyMode
                 
-                MOVB #$00, Position
-                MOVB #$01, Target
-                MOVB #$00, High
+                MOVB #$00, Target
 
                 JSR TimSet
                 JSR ADSet
                 CLI                     ;Enable interrupts
-                
-                JSR BaseLocate
-                SWI
 
 LOOP:           WAI
                 BRA LOOP
@@ -226,35 +219,27 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 ;void HanAuto(void)
 ;Handles the auto
 ;-------------------------------------------------------------------------------
-HanAuto:        JSR ArmLocate
-
-                LDAA Position
+HanAuto:
+                ;TODO Add if keypad input is entered
+                JSR BaseLocate
+                CMPA #$05       ;Compare to our magic value of 5 (not at a position)
+                BEQ HanAutoEnd
                 CMPA Target,d
                 BEQ HanAutoTarget
+                MOVB #$00, PORTA
+                BHI HanAutoRotCCW
                 LDAA #$01
                 PSHA
                 JSR mRotBase
                 LEAS 1,SP
-                LDAA #$02
-                PSHA
-                JSR ConAtoD
-                LEAS 1,SP
-                LDAA ADR00H
-                CMPA #$C0               ;See if we are not at an LED
-                BHI HanAutoHigh
-                CMPA #$0A             ;See if we are at an LED
-                BHI HanAutoEnd
-                LDAA High               ;Make sure we passed a space inbetween
-                CMPA #$00
-                BEQ HanAutoEnd
-                LDAA Position
-                ADDA #$01
-                STAA Position
-                MOVB #$00, High         ;Set high back to 0
                 BRA HanAutoEnd
-HanAutoHigh:    MOVB #$01, High         ;We have moved past a LED
+HanAutoRotCCW:  LDAA #$00
+                PSHA
+                JSR mRotBase
+                LEAS 1,SP
                 BRA HanAutoEnd
 HanAutoTarget:  MOVB #$00, PORTA
+                SWI
 HanAutoEnd:     RTS
                 
 ;-------------------------------------------------------------------------------
@@ -335,7 +320,7 @@ HanOperModeEnd: RTS
 ; int BaseLocate(void)
 ; Tells where the base is located by pulsing the IR LEDS
 ;-------------------------------------------------------------------------------
-BaseLocate:	MOVB #$10, PTP  ;See if we are at the first LED
+BaseLocate:     MOVB #$10, PTP  ;See if we are at the first LED
                 JSR BWAIT
                 LDAA #$02
                 PSHA

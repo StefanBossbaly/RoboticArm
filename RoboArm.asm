@@ -12,7 +12,7 @@ KeyValue:       RMB 1
 KeyMode:        RMB 1
 
 Target:         RMB 1
-Moving:       	RMB 1
+Moving:         RMB 1
 
 LOWTHHOLD:      EQU $0A
 HIGHTHHOLD:     EQU $F0
@@ -21,24 +21,24 @@ PhotoThHold:    EQU $90
         
         
 MAIN:           MOVB #$FF, DDRA         ;Port A is all output
-                MOVB #$F0, DDRB         ;Upper nibble is output and lower nibble is input
+                MOVB #$F0, DDRB         ;Port B Upper nibble is output and lower nibble is input
                 MOVB #$1F, DDRP         ;PP4 - PP0 are output
                 
-                MOVB #$00, PORTA
-                MOVW #$0000, COUNT
-                MOVB #$00, SPACE
+                MOVB #$00, PORTA        ;Stop all motors
+                MOVW #$0000, COUNT      ;Init count to zero
+                MOVB #$00, SPACE        ;Init space to zero
 
                 MOVB #$00, KeyCount
                 MOVB #$00, KeyMode
                 
-                MOVB #$00, Target
-                MOVB #$00, Moving
+                MOVB #$00, Target       ;Init target to 0
+                MOVB #$00, Moving       ;We are not moving
 
-                JSR TimSet
-                JSR ADSet
+                JSR TimSet              ;Setup timer overflow ISR
+                JSR ADSet               ;Setup AtoD converter
                 CLI                     ;Enable interrupts
 
-LOOP:           WAI
+LOOP:           WAI                     ;Wait for interrupts
                 BRA LOOP
                 
                 
@@ -173,7 +173,7 @@ ConAtoDWaitEnd: PULB
 
 ;-------------------------------------------------------------------------------
 ; void TimSet(void)
-; Sets up the timer for timeroverflow
+; Sets up the timer for timeroverflow and stores our ISR in the vector table
 ;-------------------------------------------------------------------------------
 TimSet:         MOVB #$80, TSCR         ;Turn on timer
                 LDD #TimeIntHandler     ;Store the ISR in the vector table
@@ -197,8 +197,8 @@ TimeIntHandler: LDD COUNT
                 BNE INTCLR
                 MOVW #$0000, COUNT      ;Reset the value of count
                 JSR KEYIO
-                CMPA #14
-                BEQ IntModeSwitch
+                CMPA #14                ;See if the value entered by the user was E
+                BEQ IntModeSwitch       ;If so then mode switch
                 LDAA KeyMode
                 CMPA #$00
                 BNE IntAutoMode
@@ -206,7 +206,7 @@ TimeIntHandler: LDD COUNT
                 BRA INTCLR
 IntAutoMode:    JSR HanAuto
                 BRA INTCLR
-IntModeSwitch:  LDAA KeyMode
+IntModeSwitch:  LDAA KeyMode            ;Switch modes between auto and operator
                 CMPA #$01
                 BEQ IntOp
                 MOVB #$01, KeyMode
@@ -219,11 +219,11 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 
 ;-------------------------------------------------------------------------------
 ;void HanAuto(void)
-;Handles the auto
+;Handles the automatic mode selection
 ;-------------------------------------------------------------------------------
 HanAuto:        LDAA Moving             ;See if we are moving
                 CMPA #$01
-                BEQ HanAutoMoving       ;If we already are moving no keypad io
+                BEQ HanAutoMoving       ;If we already are moving so no keypad io
                 JSR KEYIO               ;Get the keypad io
                 CMPA #$05
                 BHI HanAutoEnd          ;Make sure we have a valid number
@@ -231,23 +231,22 @@ HanAuto:        LDAA Moving             ;See if we are moving
                 MOVB #$01, Moving       ;We are going to move
                 
 HanAutoMoving:  JSR BaseLocate
-                CMPA #$05       ;Compare to our magic value of 5 (not at a position)
+                CMPA #$05               ;Compare to our magic value of 5 (not at a position)
                 BEQ HanAutoEnd
-                CMPA Target,d
+                CMPA Target,d           ;We are at a position, see if it is target
                 BEQ HanAutoTarget
-                MOVB #$00, PORTA
-                BHI HanAutoRotCCW
-                LDAA #$01
+                BHI HanAutoRotCCW       ;If the position is lower than our target
+                LDAA #$01               ;Rotate the base clockwise
                 PSHA
                 JSR mRotBase
                 LEAS 1,SP
                 BRA HanAutoEnd
-HanAutoRotCCW:  LDAA #$00
+HanAutoRotCCW:  LDAA #$00               ;Rotate the base counter clockwise
                 PSHA
                 JSR mRotBase
                 LEAS 1,SP
                 BRA HanAutoEnd
-HanAutoTarget:  MOVB #$00, PORTA
+HanAutoTarget:  MOVB #$00, PORTA        ;Stop moving
                 MOVB #$00, Moving       ;We are no longer moving
 HanAutoEnd:     RTS
                 
@@ -263,8 +262,7 @@ HanOperMode:    JSR KEYIO
                 LBNE HanOperModeEnd
                 MOVB #$00,SPACE
                 CMPA #$0F
-                BEQ HanOperModeClr          ;The flush key was pressed
-                ;MOVB #$00, PORTA
+                BEQ HanOperModeClr      ;The flush key was pressed
                 CMPA #$00
                 BEQ RotBaseCCW
                 CMPA #$01
@@ -327,7 +325,9 @@ HanOperModeEnd: RTS
 
 ;-------------------------------------------------------------------------------
 ; int BaseLocate(void)
-; Tells where the base is located by pulsing the IR LEDS
+; Tells where the base is located by lighting up each IR LED individually
+; Returns 0-4 in the A register for the 5 different base positions
+; Returns 5 if the base is not at any of the 5 position
 ;-------------------------------------------------------------------------------
 BaseLocate:     MOVB #$10, PTP  ;See if we are at the first LED
                 JSR BWAIT

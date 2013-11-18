@@ -14,10 +14,17 @@ KeyMode:        RMB 1
 Position:       RMB 1
 Target:         RMB 1
 High:           RMB 1
+
+LOWTHHOLD:      EQU $0A
+HIGHTHHOLD:     EQU $F0
+
+PhotoThHold:    EQU $90
         
         
 MAIN:           MOVB #$FF, DDRA         ;Port A is all output
                 MOVB #$F0, DDRB         ;Upper nibble is output and lower nibble is input
+                MOVB #$1F, DDRP         ;PP4 - PP0 are output
+                
                 MOVB #$00, PORTA
                 MOVW #$0000, COUNT
                 MOVB #$00, SPACE
@@ -26,12 +33,15 @@ MAIN:           MOVB #$FF, DDRA         ;Port A is all output
                 MOVB #$00, KeyMode
                 
                 MOVB #$00, Position
-                MOVB #$02, Target
+                MOVB #$01, Target
                 MOVB #$00, High
 
                 JSR TimSet
                 JSR ADSet
                 CLI                     ;Enable interrupts
+                
+                JSR BaseLocate
+                SWI
 
 LOOP:           WAI
                 BRA LOOP
@@ -216,7 +226,9 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 ;void HanAuto(void)
 ;Handles the auto
 ;-------------------------------------------------------------------------------
-HanAuto:        LDAA Position
+HanAuto:        JSR ArmLocate
+
+                LDAA Position
                 CMPA Target,d
                 BEQ HanAutoTarget
                 LDAA #$01
@@ -230,7 +242,7 @@ HanAuto:        LDAA Position
                 LDAA ADR00H
                 CMPA #$C0               ;See if we are not at an LED
                 BHI HanAutoHigh
-                CMPA #$10             ;See if we are at an LED
+                CMPA #$0A             ;See if we are at an LED
                 BHI HanAutoEnd
                 LDAA High               ;Make sure we passed a space inbetween
                 CMPA #$00
@@ -243,7 +255,6 @@ HanAuto:        LDAA Position
 HanAutoHigh:    MOVB #$01, High         ;We have moved past a LED
                 BRA HanAutoEnd
 HanAutoTarget:  MOVB #$00, PORTA
-                SWI
 HanAutoEnd:     RTS
                 
 ;-------------------------------------------------------------------------------
@@ -319,6 +330,97 @@ HanOperModeClr: MOVB #$00, PORTA
                 RTS
 HanOperModeNoI: MOVB #$01,SPACE
 HanOperModeEnd: RTS
+
+;-------------------------------------------------------------------------------
+; int BaseLocate(void)
+; Tells where the base is located by pulsing the IR LEDS
+;-------------------------------------------------------------------------------
+BaseLocate:	MOVB #$10, PTP  ;See if we are at the first LED
+                JSR BWAIT
+                LDAA #$02
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA ADR00H
+                CMPA LOWTHHOLD
+                BLO BaseLocate0
+                MOVB #$08, PTP  ;See if we are at the second LED
+                JSR BWAIT
+                LDAA #$02
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA ADR00H
+                CMPA LOWTHHOLD
+                BLO BaseLocate1
+                MOVB #$04, PTP  ;See if we are at the thrid LED
+                JSR BWAIT
+                LDAA #$02
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA ADR00H
+                CMPA LOWTHHOLD
+                BLO BaseLocate2
+                MOVB #$02, PTP  ;See if we are a the fourth LED
+                JSR BWAIT
+                LDAA #$02
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA ADR00H
+                CMPA LOWTHHOLD
+                BLO BaseLocate3
+                MOVB #$01, PTP  ;See if we are at the fifth LED
+                JSR BWAIT
+                LDAA #$02
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA ADR00H
+                CMPA LOWTHHOLD
+                BLO BaseLocate4
+                LDAA #$05
+                BRA BaseLocateEnd
+
+BaseLocate0:    LDAA #$00
+                BRA BaseLocateEnd
+BaseLocate1:    LDAA #$01
+                BRA BaseLocateEnd
+BaseLocate2:    LDAA #$02
+                BRA BaseLocateEnd
+BaseLocate3:    LDAA #$03
+                BRA BaseLocateEnd
+BaseLocate4:    LDAA #$04
+                BRA BaseLocateEnd
+BaseLocateEnd:  RTS
+
+
+;-------------------------------------------------------------------------------
+; int ArmLocate(void)
+; Tells where the arm is located
+;-------------------------------------------------------------------------------
+ArmLocate:      LDAA #$03
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA adr00h
+                SWI
+                CMPA PhotoThHold
+                RTS
+
+;-------------------------------------------------------------------------------
+;void BWAIT(void)
+;Busy waits by counting down from 0xFFFF
+;-------------------------------------------------------------------------------
+BWAIT:          PSHD
+                LDD #$FFFF      ;Load 0xFFFF into register D
+BLP:            CPD #$0000      ;Compare it with 0x0000
+                BEQ BEND        ;End the loop if they are equal
+                SUBD #$0001     ;Decrement 1 from D
+                BRA BLP         ;Loop
+BEND:           PULD
+                RTS             ;Return to sub routine
 
 ;-------------------------------------------------------------------------------
 ;int CINPUT(int column)

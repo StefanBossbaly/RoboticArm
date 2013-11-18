@@ -12,6 +12,7 @@ KeyValue:       RMB 1
 KeyMode:        RMB 1
 
 Target:         RMB 1
+Moving:       	RMB 1
 
 LOWTHHOLD:      EQU $0A
 HIGHTHHOLD:     EQU $F0
@@ -31,6 +32,7 @@ MAIN:           MOVB #$FF, DDRA         ;Port A is all output
                 MOVB #$00, KeyMode
                 
                 MOVB #$00, Target
+                MOVB #$00, Moving
 
                 JSR TimSet
                 JSR ADSet
@@ -219,9 +221,16 @@ INTCLR:         LDAA TFLG2              ;Clear overflow bit
 ;void HanAuto(void)
 ;Handles the auto
 ;-------------------------------------------------------------------------------
-HanAuto:
-                ;TODO Add if keypad input is entered
-                JSR BaseLocate
+HanAuto:        LDAA Moving             ;See if we are moving
+                CMPA #$01
+                BEQ HanAutoMoving       ;If we already are moving no keypad io
+                JSR KEYIO               ;Get the keypad io
+                CMPA #$05
+                BHI HanAutoEnd          ;Make sure we have a valid number
+                STAA Target             ;Store the target location
+                MOVB #$01, Moving       ;We are going to move
+                
+HanAutoMoving:  JSR BaseLocate
                 CMPA #$05       ;Compare to our magic value of 5 (not at a position)
                 BEQ HanAutoEnd
                 CMPA Target,d
@@ -239,7 +248,7 @@ HanAutoRotCCW:  LDAA #$00
                 LEAS 1,SP
                 BRA HanAutoEnd
 HanAutoTarget:  MOVB #$00, PORTA
-                SWI
+                MOVB #$00, Moving       ;We are no longer moving
 HanAutoEnd:     RTS
                 
 ;-------------------------------------------------------------------------------

@@ -247,7 +247,16 @@ HanAutoRotCCW:  LDAA #$00               ;Rotate the base counter clockwise
                 LEAS 1,SP
                 BRA HanAutoEnd
 HanAutoTarget:  MOVB #$00, PORTA        ;Stop moving
+                LDAA #$01
+                PSHA
+                JSR mMovClaw
+                LEAS 1,SP
+HanAutoLoop:    JSR ClawLocate
+                CMPA #$00
+                BEQ HanAutoLoop
+                MOVB #$00, PORTA
                 MOVB #$00, Moving       ;We are no longer moving
+                SWI
 HanAutoEnd:     RTS
                 
 ;-------------------------------------------------------------------------------
@@ -401,6 +410,24 @@ ArmLocate:      LDAA #$03
                 LDAA adr00h
                 SWI
                 CMPA PhotoThHold
+                RTS
+
+;-------------------------------------------------------------------------------
+; int ClawLocate(void)
+; Tells where the claw is located
+; Returns value in the A register
+; 0 = Open, 1 = Close
+;-------------------------------------------------------------------------------
+ClawLocate:     LDAA #$04
+                PSHA
+                JSR ConAtoD
+                LEAS 1,SP
+                LDAA adr00h
+                CMPA #$10
+                BHI ClawLocateOpen
+                LDAA #$01
+                RTS
+ClawLocateOpen: LDAA #$00
                 RTS
 
 ;-------------------------------------------------------------------------------

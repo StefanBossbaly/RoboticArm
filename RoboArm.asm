@@ -246,7 +246,15 @@ HanAutoRotCCW:  LDAA #$00               ;Rotate the base counter clockwise
                 JSR mRotBase
                 LEAS 1,SP
                 BRA HanAutoEnd
-HanAutoTarget:  MOVB #$00, PORTA        ;Stop moving
+HanAutoTarget:  MOVB #$00, PORTA
+		LDAA #$00
+                PSHA
+                JSR mMovBase
+                LEAS 1,SP
+HanAutoLoop1:   JSR ArmLocate
+                CMPA #$00
+                BEQ HanAutoLoop1
+		MOVB #$00, PORTA
                 LDAA #$01
                 PSHA
                 JSR mMovClaw
@@ -402,14 +410,19 @@ BaseLocateEnd:  RTS
 ;-------------------------------------------------------------------------------
 ; int ArmLocate(void)
 ; Tells where the arm is located
+; 0  = Up
+; 1 = Down
 ;-------------------------------------------------------------------------------
 ArmLocate:      LDAA #$03
                 PSHA
                 JSR ConAtoD
                 LEAS 1,SP
                 LDAA adr00h
-                SWI
-                CMPA PhotoThHold
+                CMPA #$62
+                BHI ArmLocateUp
+                LDAA #$01
+                RTS
+ArmLocateUp:    LDAA #$00
                 RTS
 
 ;-------------------------------------------------------------------------------
